@@ -309,9 +309,11 @@ async function docx2xlsx(file) {
     if (!f) continue;
     const ext = (t.split('.').pop() || 'png').toLowerCase().replace('jpg', 'jpeg');
     if (!['png', 'jpeg', 'gif'].includes(ext)) continue;
-    const id = wb.addImage({ base64: await f.async('base64'), extension: ext });
+    let id; try { id = wb.addImage({ base64: await f.async('base64'), extension: ext }); } catch (_) { continue; }
     const xr = Math.min(PW, Math.max(0, im.x - O)); let ci = 0; while (ci < n - 1 && bounds[ci + 1] <= xr) ci++;
-    ws.addImage(id, { tl: { nativeCol: ci, nativeColOff: Math.round((xr - bounds[ci]) / 15 * 9525), nativeRow: idx, nativeRowOff: Math.round(Math.max(0, im.dy) * 12700) }, ext: { width: im.w, height: im.h }, editAs: 'oneCell' });
+    const ext2 = { width: im.w, height: im.h }, fr = (xr - bounds[ci]) / (bounds[ci + 1] - bounds[ci]);
+    try { ws.addImage(id, { tl: { nativeCol: ci, nativeColOff: Math.round((xr - bounds[ci]) / 15 * 9525), nativeRow: idx, nativeRowOff: Math.round(Math.max(0, im.dy) * 12700) }, ext: ext2, editAs: 'oneCell' }); }
+    catch (_) { ws.addImage(id, { tl: { col: ci + fr, row: idx }, ext: ext2 }); }
   }
 
   ws.pageSetup = {

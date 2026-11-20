@@ -68,7 +68,7 @@ footer{color:var(--mu);font-size:12px;text-align:center}
 <input id="f" type="file" multiple accept=".docx,.dotx,.docm" hidden></label>
 <div class="list" id="list"></div>
 </div>
-<footer>File .doc / .odt / .rtf: simpan dulu sebagai .docx dari Word atau LibreOffice. Logo/gambar dan garis ikut dibawa. Kotak teks (text box) belum didukung.</footer>
+<footer><div style="opacity:.7;margin-bottom:6px">Doc2Sheet v4</div>File .doc / .odt / .rtf: simpan dulu sebagai .docx dari Word atau LibreOffice. Logo/gambar dan garis ikut dibawa. Kotak teks (text box) belum didukung.</footer>
 </main>
 <script>
 const W='http://schemas.openxmlformats.org/wordprocessingml/2006/main',$=s=>document.querySelector(s);
@@ -79,7 +79,7 @@ const load=s=>new Promise((o,n)=>{const e=document.createElement('script');e.src
 async function libs(){
  if(!window.JSZip)await load('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
  if(!window.ExcelJS)await load('https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js');
- if(!window.docx2xlsx)await load('engine.js?v=2');
+ if(!window.docx2xlsx)await load('engine.js?v=4');
 }
 async function convert(file){await libs();return window.docx2xlsx(file)}
 const list=$('#list');
@@ -102,7 +102,8 @@ inp.onchange=()=>{run([...inp.files]);inp.value=''};
 dz.addEventListener('drop',x=>run([...x.dataTransfer.files].filter(f=>/\.(docx|dotx|docm)$/i.test(f.name))));
 let dp;addEventListener('beforeinstallprompt',e=>{e.preventDefault();dp=e;$('#inst').style.display='block'});
 $('#inst').onclick=async()=>{dp.prompt();await dp.userChoice;$('#inst').style.display='none'};
-if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js',{updateViaCache:'none'});let rl=0;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(rl++===0&&navigator.serviceWorker.controller&&window.__ready)location.reload()});
+window.__ready=1;
 </script>
 </body>
 </html>
