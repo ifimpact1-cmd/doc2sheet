@@ -57,7 +57,7 @@ footer{color:var(--mu);font-size:12px;text-align:center}
 <h1>Word jadi <span>Excel</span>, tata letak tetap.</h1>
 <p class="s">Semua diproses di perangkatmu. File tidak pernah diunggah ke server, dan bisa dipakai offline.</p>
 <ul>
-<li><b>Tabel &amp; kolom</b>Posisi sel, gabungan sel, lebar kolom ikut asli</li>
+<li><b>Posisi persis</b>Tabel, kolom, tab &amp; rata teks mengikuti letak aslinya</li>
 <li><b>Format teks</b>Tebal, miring, warna, ukuran, rata teks</li>
 <li><b>Warna sel</b>Latar &amp; garis tabel dipertahankan</li>
 <li><b>Ringan</b>Mesin konversi dimuat hanya saat dipakai</li>
@@ -68,7 +68,7 @@ footer{color:var(--mu);font-size:12px;text-align:center}
 <input id="f" type="file" multiple accept=".docx,.dotx,.docm" hidden></label>
 <div class="list" id="list"></div>
 </div>
-<footer>File .doc / .odt / .rtf: simpan dulu sebagai .docx dari Word atau LibreOffice. Gambar tidak ikut dikonversi.</footer>
+<footer>File .doc / .odt / .rtf: simpan dulu sebagai .docx dari Word atau LibreOffice. Logo/gambar dan garis ikut dibawa. Kotak teks (text box) belum didukung.</footer>
 </main>
 <script>
 const W='http://schemas.openxmlformats.org/wordprocessingml/2006/main',$=s=>document.querySelector(s);
@@ -79,81 +79,9 @@ const load=s=>new Promise((o,n)=>{const e=document.createElement('script');e.src
 async function libs(){
  if(!window.JSZip)await load('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
  if(!window.ExcelJS)await load('https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js');
+ if(!window.docx2xlsx)await load('engine.js?v=2');
 }
-async function convert(file){
- await libs();
- const zip=await JSZip.loadAsync(file);
- const xml=async p=>{const f=zip.file(p);return f?new DOMParser().parseFromString(await f.async('string'),'application/xml'):null};
- const doc=await xml('word/document.xml');if(!doc)throw Error('Bukan file .docx yang valid');
- const st=await xml('word/styles.xml');let dsz=11,dfont='Calibri';
- if(st){const d=st.getElementsByTagNameNS(W,'rPrDefault')[0];if(d){const s=val(d.getElementsByTagNameNS(W,'sz')[0]);if(s)dsz=s/2;const f=at(d.getElementsByTagNameNS(W,'rFonts')[0],'ascii');if(f)dfont=f}}
- const body=doc.getElementsByTagNameNS(W,'body')[0];
- const items=[...body.children].filter(c=>c.localName==='p'||c.localName==='tbl');
- const sect=kid(body,'sectPr'),pg=kid(sect,'pgSz'),mg=kid(sect,'pgMar');
- const pw=+at(pg,'w')||11906,ph=+at(pg,'h')||16838;
- const pageW=pw-(+at(mg,'left')||1440)-(+at(mg,'right')||1440);
- // grid tiap tabel
- const grids=new Map();
- for(const t of items.filter(i=>i.localName==='tbl')){
-  let g=kids(kid(t,'tblGrid'),'gridCol').map(c=>+at(c,'w'));
-  if(!g.length)g=kids(kid(t,'tr'),'tc').map(c=>+at(kid(kid(c,'tcPr'),'tcW'),'w')||1000);
-  const cum=[0];g.forEach(w=>cum.push(cum[cum.length-1]+w));grids.set(t,cum);
- }
- let step=60,bounds;
- for(const s of [60,120,240,480,960]){step=s;const b=new Set([0,Math.round(pageW/s)*s]);grids.forEach(c=>c.forEach(x=>b.add(Math.round(x/s)*s)));bounds=[...b].sort((a,b)=>a-b);if(bounds.length<=41)break}
- const n=bounds.length-1,cx=x=>bounds.indexOf(Math.round(x/step)*step)+1;
- const wb=new ExcelJS.Workbook(),ws=wb.addWorksheet('Dokumen',{views:[{showGridLines:false}],pageSetup:{fitToPage:true,fitToWidth:1,fitToHeight:0,orientation:ph<pw?'landscape':'portrait'}});
- for(let i=0;i<n;i++)ws.getColumn(i+1).width=Math.max(2,(bounds[i+1]-bounds[i])/105);
- const J={both:'justify',center:'center',right:'right',end:'right'};
- function para(p){
-  const pp=kid(p,'pPr'),ps=val(kid(pp,'pStyle'))||'',head=/head|title|judul/i.test(ps),runs=[];
-  if(kid(pp,'numPr'))runs.push({text:'• ',font:{name:dfont,size:dsz}});
-  for(const r of p.getElementsByTagNameNS(W,'r')){
-   let t='';for(const c of r.childNodes){if(c.localName==='t')t+=c.textContent;else if(c.localName==='tab')t+='    ';else if(c.localName==='br'||c.localName==='cr')t+='\n'}
-   if(!t)continue;
-   const f={name:dfont,size:head?Math.max(dsz,14):dsz},rp=kid(r,'rPr');if(head)f.bold=true;
-   if(rp){if(kid(rp,'b'))f.bold=on(kid(rp,'b'));if(on(kid(rp,'i')))f.italic=true;const u=kid(rp,'u');if(u&&val(u)!=='none')f.underline=true;
-    const s=val(kid(rp,'sz'));if(s)f.size=s/2;const c=val(kid(rp,'color'));if(c&&c!=='auto')f.color={argb:'FF'+c};const fn=at(kid(rp,'rFonts'),'ascii');if(fn)f.name=fn}
-   runs.push({text:t,font:f});
-  }
-  return {runs,al:J[val(kid(pp,'jc'))]||'left'};
- }
- const est=(runs,wc)=>{const fs=Math.max(dsz,...runs.map(r=>r.font.size||0)),cap=Math.max(1,wc*11/fs);
-  return runs.map(r=>r.text).join('').split('\n').reduce((a,l)=>a+Math.max(1,Math.ceil(l.length/cap)),0)*fs*1.38+3};
- let r=0;
- for(const it of items){
-  if(it.localName==='p'){
-   r++;const {runs,al}=para(it),c=ws.getCell(r,1);
-   if(runs.length)c.value={richText:runs};c.alignment={horizontal:al,vertical:'top',wrapText:true};
-   if(n>1)ws.mergeCells(r,1,r,n);
-   ws.getRow(r).height=Math.max(dsz*1.4+2,runs.length?est(runs,pageW/105):0);
-   continue;
-  }
-  const cum=grids.get(it),tb=kid(kid(it,'tblPr'),'tblBorders'),hasB=!!tb&&kids(tb,'top').concat(kids(tb,'insideH'),kids(tb,'left')).some(nb);
-  const vm={},vl=[];
-  for(const tr of kids(it,'tr')){
-   r++;let g=0,hmax=0;const th=(+at(kid(kid(tr,'trPr'),'trHeight'),'val')||0)/20;
-   for(const tc of kids(tr,'tc')){
-    const pr=kid(tc,'tcPr'),span=+val(kid(pr,'gridSpan'))||1,e=Math.min(g+span,cum.length-1);
-    const c1=cx(cum[g]),c2=cx(cum[e])-1,vE=kid(pr,'vMerge'),isCont=vE&&val(vE)!=='restart';
-    g+=span;
-    if(isCont){if(vm[c1])vm[c1].r2=r;continue}
-    const runs=[];let al='left';
-    kids(tc,'p').forEach((p,i)=>{const q=para(p);if(i===0)al=q.al;if(i&&runs.length)runs.push({text:'\n',font:{name:dfont,size:dsz}});runs.push(...q.runs)});
-    const c=ws.getCell(r,c1);if(runs.length)c.value={richText:runs};
-    const va=val(kid(pr,'vAlign'));c.alignment={horizontal:al,vertical:va==='center'?'middle':va==='bottom'?'bottom':'top',wrapText:true};
-    const fill=at(kid(pr,'shd'),'fill');if(fill&&fill!=='auto')c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF'+fill}};
-    const tcb=kid(pr,'tcBorders');if(hasB||(tcb&&[...tcb.children].some(nb))){const b={style:'thin',color:{argb:'FF666666'}};c.border={top:b,left:b,bottom:b,right:b}}
-    hmax=Math.max(hmax,est(runs,(cum[e]-cum[g-span])/105-1));
-    if(vE){vm[c1]={r1:r,r2:r,c1,c2};vl.push(vm[c1])}
-    else{delete vm[c1];if(c2>c1)ws.mergeCells(r,c1,r,c2)}
-   }
-   ws.getRow(r).height=Math.max(15,th,hmax);
-  }
-  vl.forEach(m=>ws.mergeCells(m.r1,m.c1,m.r2,m.c2));
- }
- return new Blob([await wb.xlsx.writeBuffer()],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
-}
+async function convert(file){await libs();return window.docx2xlsx(file)}
 const list=$('#list');
 async function run(files){
  for(const f of files){
